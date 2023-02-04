@@ -1,10 +1,6 @@
-import { 
-  useEffect,
-  createContext, 
-  useContext, 
-  useReducer, 
-  useCallback, 
-  useMemo } from "react";
+import {create} from "zustand"
+//Zustand is a direct state manager for react => https://zustand-demo.pmnd.rs/
+//the data flow only goes one way/one direction
 
 interface Pokemon {
   id: number;
@@ -18,73 +14,33 @@ interface Pokemon {
   speed: number;
 }
 
-//create a custom hook to fetch the pokemon data
-function usePokemonSource(): {
+const searchAndSortPokemon = (
+  pokemon: Pokemon[],
+  search: string
+) => pokemon
+.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+.slice(0, 10)
+.sort((a, b) => a.name.localeCompare(b.name));
+
+export const usePokemon = create<{
   pokemon: Pokemon[];
+  allPokemon: Pokemon[];
+  setAllPokemon: (pokemon: Pokemon[]) => void;
   search: string;
   setSearch: (search: string) => void
-} {
-  type PokemonState = {
-    pokemon: Pokemon[];
-    search: string
-  };
+}>((set, get) => ({
+  pokemon: [],
+  allPokemon: [],
+  setAllPokemon: (pokemon) => 
+  set({allPokemon: pokemon, pokemon: searchAndSortPokemon(pokemon, get().search)
+  }),
+  search: "",
+  setSearch: (search) => set({search,
+    pokemon: searchAndSortPokemon(get().allPokemon, search)
+  }),
+}));
 
-  const initialState: PokemonState = {
-    pokemon: [],
-    search: ""
-  };
-
-  type PokemonAction = {type: "setPokemon", payload: Pokemon[]} | {type: "setSearch"; payload: string};
-
-  const [{pokemon, search}, dispatch] = useReducer((state: PokemonState, action: PokemonAction) => {
-    switch(action.type) {
-      case "setPokemon":
-        return {...state, pokemon: action.payload};
-      case "setSearch" :
-        return {...state, search: action.payload};
-    }
-  }, initialState);
-
-  useEffect(() => {
-    fetch("/pokemon.json")
-    .then((res) => res.json())
-    .then((data) => dispatch({
-      type: "setPokemon",
-      payload: data
-    }))
-    .catch((err) => console.log(err))
-  }, []);
-
-  const setSearch = useCallback((search: string) => {
-    dispatch({
-      type: "setSearch",
-      payload: search
-    })
-  }, []);
-
-  //calculate the search term / make it case insensitive
-  const filteredPokemon = useMemo(() => pokemon.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 20), [pokemon, search]);
-
-  //sort the pokemon array
-  const sortedPokemon = useMemo(() => [...filteredPokemon].sort((a, b) => a.name.localeCompare(b.name)) , [filteredPokemon])
-
-  return {pokemon: sortedPokemon, search, setSearch};
-};
-
-//create a pokemon context 
-const PokemonContext = createContext<
-ReturnType<typeof usePokemonSource> | undefined>(undefined);
-
-//a custom hook for useContext
-export function usePokemon() {
-  return useContext(PokemonContext)!;
-}
-
-//create a custom component for PokemonContext.Provider
-export function PokemonProvider({children}: {children: React.ReactNode}) {
-    return (
-        <PokemonContext.Provider value={usePokemonSource()}>
-            {children}
-        </PokemonContext.Provider>
-    )
-}
+//fetch the data
+fetch("/pokemon.json")
+.then((res) => res.json())
+.then((pokemon) => usePokemon.getState().setAllPokemon(pokemon));
